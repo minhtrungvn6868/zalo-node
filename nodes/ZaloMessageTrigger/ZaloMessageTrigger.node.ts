@@ -7,10 +7,11 @@ import {
 	IHookFunctions,
 	IDataObject,
 } from 'n8n-workflow';
-import { API, Zalo, ThreadType } from 'zca-js';
+import { API, Zalo, ThreadType, Undo, Message } from 'zca-js';
 
 let api: API | undefined;
 let reconnectTimer: NodeJS.Timeout | undefined;
+
 
 export class ZaloMessageTrigger implements INodeType {
 	description: INodeTypeDescription = {
@@ -106,26 +107,49 @@ export class ZaloMessageTrigger implements INodeType {
                     const webhookUrl = this.getNodeWebhookUrl('default') as string;
                     console.log(webhookUrl);
 					// Add message event listener
-					api.listener.on('message', async (message) => {
+					api.listener.on('message', async (message:Message) => {
 						const webhookData = this.getWorkflowStaticData('node');
 						// const eventTypes = webhookData.eventTypes as ThreadType[];
-                        this.helpers.httpRequest({
-                            method: 'POST',
-                            url: webhookUrl,
-                            body: {
-                                message: message,
-                            },
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                        });
+						this.helpers.httpRequest({
+								method: 'POST',
+								url: webhookUrl,
+								body: {
+										message: {
+											...message,
+											eventName: 'message'
+										}
+								},
+								headers: {
+										'Content-Type': 'application/json',
+								},
+						});
 						// if (eventTypes.includes(message.type)) {
-                        //     console.log(message);
-							// Store message in static data to be processed by webhook method
+						//     console.log(message);
+						// Store message in static data to be processed by webhook method
 						webhookData.lastMessage = message;
 						// }
 					});
 
+					api.listener.on('undo', (undo: Undo) => {
+						console.log('Message deleted:', undo);
+						const message = {
+							...undo,
+							eventName: 'undo'
+						}
+						const webhookData = this.getWorkflowStaticData('node');
+						// const eventTypes = webhookData.eventTypes as ThreadType[];
+						this.helpers.httpRequest({
+								method: 'POST',
+								url: webhookUrl,
+								body: {
+										message: message,
+								},
+								headers: {
+										'Content-Type': 'application/json',
+								},
+						});
+						webhookData.lastMessage = message;
+					});
 					// Start listening
 					api.listener.start();
 
